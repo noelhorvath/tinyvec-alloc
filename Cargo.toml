@@ -1,5 +1,5 @@
 [package]
-name = "tinyvec"
+name = "tinyvec-alloc"
 description = "`tinyvec` provides 100% safe vec-like data structures."
 version = "1.6.0"
 authors = ["Lokathor <zefria@gmail.com>"]
@@ -7,7 +7,6 @@ edition = "2018"
 license = "Zlib OR Apache-2.0 OR MIT"
 keywords = ["vec", "no_std", "no-std"]
 categories = ["data-structures", "no-std"]
-repository = "https://github.com/Lokathor/tinyvec"
 
 [dependencies]
 tinyvec_macros = { version = "0.1", optional = true }
@@ -63,7 +62,7 @@ real_blackbox = ["criterion/real_blackbox"]
 
 [package.metadata.docs.rs]
 features = ["alloc", "std", "grab_spare_slice", "rustc_1_55", "serde"]
-rustdoc-args = ["--cfg","docs_rs"]
+rustdoc-args = ["--cfg", "docs_rs"]
 
 [package.metadata.playground]
 features = ["alloc", "std", "grab_spare_slice", "rustc_1_55", "serde"]
