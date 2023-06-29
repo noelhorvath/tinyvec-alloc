@@ -16,7 +16,7 @@ use serde::ser::{Serialize, SerializeSeq, Serializer};
 /// want to initially place into the array.
 ///
 /// ```rust
-/// use tinyvec::*;
+/// use tinyvec_alloc::*;
 ///
 /// // The backing array type can be specified in the macro call
 /// let empty_av = array_vec!([u8; 16]);
@@ -70,7 +70,7 @@ macro_rules! array_vec {
 /// macro. Specify the array type, then optionally give all the initial values
 /// you want to have.
 /// ```rust
-/// # use tinyvec::*;
+/// # use tinyvec_alloc::*;
 /// let some_ints = array_vec!([i32; 4] => 1, 2, 3);
 /// assert_eq!(some_ints.len(), 3);
 /// ```
@@ -79,7 +79,7 @@ macro_rules! array_vec {
 /// array with length 0. The [`new`](ArrayVec::new) method is the same as
 /// calling `default`
 /// ```rust
-/// # use tinyvec::*;
+/// # use tinyvec_alloc::*;
 /// let some_ints = ArrayVec::<[i32; 7]>::default();
 /// assert_eq!(some_ints.len(), 0);
 ///
@@ -92,7 +92,7 @@ macro_rules! array_vec {
 /// _part of_ the array then you can use
 /// [`from_array_len`](ArrayVec::from_array_len):
 /// ```rust
-/// # use tinyvec::*;
+/// # use tinyvec_alloc::*;
 /// let some_ints = ArrayVec::from([5, 6, 7, 8]);
 /// assert_eq!(some_ints.len(), 4);
 ///
@@ -252,7 +252,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 10] => 1, 2, 3);
   /// let mut av2 = array_vec!([i32; 10] => 4, 5, 6);
   /// av.append(&mut av2);
@@ -273,7 +273,7 @@ impl<A: Array> ArrayVec<A> {
   /// If appending would overflow the capacity, Some(other) is returned.
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 7] => 1, 2, 3);
   /// let mut av2 = array_vec!([i32; 7] => 4, 5, 6);
   /// av.append(&mut av2);
@@ -368,7 +368,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 4] => 1, 2, 3);
   /// let av2: ArrayVec<[i32; 4]> = av.drain(1..).collect();
   /// assert_eq!(av.as_slice(), &[1][..]);
@@ -393,7 +393,7 @@ impl<A: Array> ArrayVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::{array_vec, ArrayVec};
+  /// # use tinyvec_alloc::{array_vec, ArrayVec};
   /// let mut favorite_numbers = array_vec!([i32; 5] => 87, 48, 33, 9, 26);
   /// assert_eq!(favorite_numbers.clone().into_inner(), [87, 48, 33, 9, 26]);
   ///
@@ -405,7 +405,7 @@ impl<A: Array> ArrayVec<A> {
   /// collecting it into an `ArrayVec`.
   ///
   /// ```rust
-  /// # use tinyvec::ArrayVec;
+  /// # use tinyvec_alloc::ArrayVec;
   /// let arr_vec: ArrayVec<[i32; 10]> = (1..=3).cycle().take(10).collect();
   /// let inner = arr_vec.into_inner();
   /// assert_eq!(inner, [1, 2, 3, 1, 2, 3, 1, 2, 3, 1]);
@@ -460,7 +460,7 @@ impl<A: Array> ArrayVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 4]);
   /// let mut to_inf = av.fill(0..);
   /// assert_eq!(&av[..], [0, 1, 2, 3]);
@@ -517,7 +517,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 10] => 1, 2, 3);
   /// av.insert(1, 4);
   /// assert_eq!(av.as_slice(), &[1, 4, 2, 3]);
@@ -540,7 +540,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut av = array_vec!([&'static str; 4] => "one", "two", "three");
   /// av.insert(1, "four");
   /// assert_eq!(av.as_slice(), &["one", "four", "two", "three"]);
@@ -605,7 +605,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 10] => 1, 2);
   /// assert_eq!(av.pop(), Some(2));
   /// assert_eq!(av.pop(), Some(1));
@@ -630,7 +630,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 2]);
   /// assert_eq!(&av[..], []);
   /// av.push(1);
@@ -649,7 +649,7 @@ impl<A: Array> ArrayVec<A> {
   /// Returns back the element if the capacity is exhausted,
   /// otherwise returns None.
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 2]);
   /// assert_eq!(av.as_slice(), []);
   /// assert_eq!(av.try_push(1), None);
@@ -683,7 +683,7 @@ impl<A: Array> ArrayVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 4] => 1, 2, 3);
   /// assert_eq!(av.remove(1), 2);
   /// assert_eq!(&av[..], [1, 3]);
@@ -713,7 +713,7 @@ impl<A: Array> ArrayVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   ///
   /// let mut av = array_vec!([&str; 10] => "hello");
   /// av.resize(3, "world");
@@ -739,7 +739,7 @@ impl<A: Array> ArrayVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   ///
   /// let mut av = array_vec!([i32; 10] => 1, 2, 3);
   /// av.resize_with(5, Default::default);
@@ -772,7 +772,7 @@ impl<A: Array> ArrayVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   ///
   /// let mut av = array_vec!([i32; 10] => 1, 1, 2, 3, 3, 4);
   /// av.retain(|&x| x % 2 == 0);
@@ -856,7 +856,7 @@ impl<A: Array> ArrayVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 4] => 1, 2, 3);
   /// let av2 = av.split_off(1);
   /// assert_eq!(&av[..], [1]);
@@ -900,7 +900,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 4] => 1, 2, 3);
   /// let av2: ArrayVec<[i32; 4]> = av.splice(1.., 4..=6).collect();
   /// assert_eq!(av.as_slice(), &[1, 4, 5, 6][..]);
@@ -956,7 +956,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([&str; 4] => "foo", "bar", "quack", "zap");
   ///
   /// assert_eq!(av.swap_remove(1), "bar");
@@ -1032,7 +1032,7 @@ impl<A> ArrayVec<A> {
   /// This method in particular allows to create values for statics:
   ///
   /// ```rust
-  /// # use tinyvec::ArrayVec;
+  /// # use tinyvec_alloc::ArrayVec;
   /// static DATA: ArrayVec<[u8; 5]> = ArrayVec::from_array_empty([0; 5]);
   /// assert_eq!(DATA.len(), 0);
   /// ```
@@ -1040,7 +1040,7 @@ impl<A> ArrayVec<A> {
   /// But of course it is just an normal empty `ArrayVec`:
   ///
   /// ```rust
-  /// # use tinyvec::ArrayVec;
+  /// # use tinyvec_alloc::ArrayVec;
   /// let mut data = ArrayVec::from_array_empty([1, 2, 3, 4]);
   /// assert_eq!(&data[..], &[]);
   /// data.push(42);
@@ -1059,7 +1059,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 4]);
   /// assert_eq!(av.grab_spare_slice().len(), 4);
   /// av.push(10);
@@ -1077,7 +1077,7 @@ impl<A: Array> ArrayVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut av = array_vec!([i32; 4]);
   /// assert_eq!(av.grab_spare_slice_mut().len(), 4);
   /// av.push(10);
@@ -1771,24 +1771,25 @@ where
 }
 
 #[cfg(feature = "alloc")]
-use alloc::vec::Vec;
-
-#[cfg(all(feature = "alloc", feature = "rustc_1_57"))]
-use alloc::collections::TryReserveError;
+use alloc::{alloc::Allocator, collections::TryReserveError, vec::Vec};
 
 #[cfg(feature = "alloc")]
 impl<A: Array> ArrayVec<A> {
   /// Drains all elements to a Vec, but reserves additional space
   /// ```
-  /// # use tinyvec::*;
+  /// # #![feature(allocator_api)]
+  /// # use tinyvec_alloc::*;
+  /// # use tinyvec_alloc::alloc::alloc::Global;
   /// let mut av = array_vec!([i32; 7] => 1, 2, 3);
-  /// let v = av.drain_to_vec_and_reserve(10);
+  /// let v = av.drain_to_vec_and_reserve::<Global>(10);
   /// assert_eq!(v, &[1, 2, 3]);
   /// assert_eq!(v.capacity(), 13);
   /// ```
-  pub fn drain_to_vec_and_reserve(&mut self, n: usize) -> Vec<A::Item> {
+  pub fn drain_to_vec_and_reserve<Alloc: Allocator + Default>(
+    &mut self, n: usize,
+  ) -> Vec<A::Item, Alloc> {
     let cap = n + self.len();
-    let mut v = Vec::with_capacity(cap);
+    let mut v = Vec::with_capacity_in(cap, Alloc::default());
     let iter = self.iter_mut().map(core::mem::take);
     v.extend(iter);
     self.set_len(0);
@@ -1802,20 +1803,22 @@ impl<A: Array> ArrayVec<A> {
   /// If the allocator reports a failure, then an error is returned.
   ///
   /// ```
-  /// # use tinyvec::*;
+  /// # #![feature(allocator_api)]
+  /// # use tinyvec_alloc::*;
+  /// # use tinyvec_alloc::alloc::alloc::Global;
   /// let mut av = array_vec!([i32; 7] => 1, 2, 3);
-  /// let v = av.try_drain_to_vec_and_reserve(10);
+  /// let v = av.try_drain_to_vec_and_reserve::<Global>(10);
   /// assert!(matches!(v, Ok(_)));
   /// let v = v.unwrap();
   /// assert_eq!(v, &[1, 2, 3]);
   /// assert_eq!(v.capacity(), 13);
   /// ```
   #[cfg(feature = "rustc_1_57")]
-  pub fn try_drain_to_vec_and_reserve(
+  pub fn try_drain_to_vec_and_reserve<Alloc: Allocator + Default>(
     &mut self, n: usize,
-  ) -> Result<Vec<A::Item>, TryReserveError> {
+  ) -> Result<Vec<A::Item, Alloc>, TryReserveError> {
     let cap = n + self.len();
-    let mut v = Vec::new();
+    let mut v = Vec::new_in(Alloc::default());
     v.try_reserve(cap)?;
     let iter = self.iter_mut().map(core::mem::take);
     v.extend(iter);
@@ -1825,13 +1828,17 @@ impl<A: Array> ArrayVec<A> {
 
   /// Drains all elements to a Vec
   /// ```
-  /// # use tinyvec::*;
+  /// # #![feature(allocator_api)]
+  /// # use tinyvec_alloc::*;
+  /// # use tinyvec_alloc::alloc::alloc::Global;
   /// let mut av = array_vec!([i32; 7] => 1, 2, 3);
-  /// let v = av.drain_to_vec();
+  /// let v: Vec<_, Global> = av.drain_to_vec::<Global>();
   /// assert_eq!(v, &[1, 2, 3]);
   /// assert_eq!(v.capacity(), 3);
   /// ```
-  pub fn drain_to_vec(&mut self) -> Vec<A::Item> {
+  pub fn drain_to_vec<Alloc: Allocator + Default>(
+    &mut self,
+  ) -> Vec<A::Item, Alloc> {
     self.drain_to_vec_and_reserve(0)
   }
 
@@ -1842,9 +1849,11 @@ impl<A: Array> ArrayVec<A> {
   /// If the allocator reports a failure, then an error is returned.
   ///
   /// ```
-  /// # use tinyvec::*;
+  /// # #![feature(allocator_api)]
+  /// # use tinyvec_alloc::*;
+  /// # use tinyvec_alloc::alloc::alloc::Global;
   /// let mut av = array_vec!([i32; 7] => 1, 2, 3);
-  /// let v = av.try_drain_to_vec();
+  /// let v = av.try_drain_to_vec::<Global>();
   /// assert!(matches!(v, Ok(_)));
   /// let v = v.unwrap();
   /// assert_eq!(v, &[1, 2, 3]);
@@ -1852,7 +1861,9 @@ impl<A: Array> ArrayVec<A> {
   /// assert!(v.capacity() >= 3);
   /// ```
   #[cfg(feature = "rustc_1_57")]
-  pub fn try_drain_to_vec(&mut self) -> Result<Vec<A::Item>, TryReserveError> {
+  pub fn try_drain_to_vec<Alloc: Allocator + Default>(
+    &mut self,
+  ) -> Result<Vec<A::Item, Alloc>, TryReserveError> {
     self.try_drain_to_vec_and_reserve(0)
   }
 }
