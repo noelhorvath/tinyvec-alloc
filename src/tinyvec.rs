@@ -2,7 +2,10 @@
 
 use super::*;
 
-use alloc::vec::{self, Vec};
+use alloc::{
+  alloc::{Allocator, Global},
+  vec::{Drain, IntoIter, Vec},
+};
 use core::convert::TryFrom;
 use tinyvec_macros::impl_mirrored;
 
@@ -22,7 +25,7 @@ use serde::ser::{Serialize, SerializeSeq, Serializer};
 /// want to initially place into the array.
 ///
 /// ```rust
-/// use tinyvec::*;
+/// use tinyvec_alloc::*;
 ///
 /// // The backing array type can be specified in the macro call
 /// let empty_tv = tiny_vec!([u8; 16]);
@@ -48,7 +51,7 @@ macro_rules! tiny_vec {
           f($crate::array_vec!($array_type => $($elem),*))
         }
         $crate::TinyVecConstructor::Heap(f) => {
-          f(vec!($($elem),*))
+          f($crate::alloc::vec!($($elem),*))
         }
       }
     }
@@ -68,9 +71,9 @@ macro_rules! tiny_vec {
 }
 
 #[doc(hidden)] // Internal implementation details of `tiny_vec!`
-pub enum TinyVecConstructor<A: Array> {
-  Inline(fn(ArrayVec<A>) -> TinyVec<A>),
-  Heap(fn(Vec<A::Item>) -> TinyVec<A>),
+pub enum TinyVecConstructor<A: Array, Alloc: Allocator = Global> {
+  Inline(fn(ArrayVec<A>) -> TinyVec<A, Alloc>),
+  Heap(fn(Vec<A::Item, Alloc>) -> TinyVec<A, Alloc>),
 }
 
 /// A vector that starts inline, but can automatically move to the heap.
@@ -90,22 +93,23 @@ pub enum TinyVecConstructor<A: Array> {
 /// There is also a macro
 ///
 /// ```rust
-/// # use tinyvec::*;
+/// # use tinyvec_alloc::*;
 /// let empty_tv = tiny_vec!([u8; 16]);
 /// let some_ints = tiny_vec!([i32; 4] => 1, 2, 3);
 /// ```
 #[cfg_attr(docs_rs, doc(cfg(feature = "alloc")))]
-pub enum TinyVec<A: Array> {
+pub enum TinyVec<A: Array, Alloc: Allocator = Global> {
   #[allow(missing_docs)]
   Inline(ArrayVec<A>),
   #[allow(missing_docs)]
-  Heap(Vec<A::Item>),
+  Heap(Vec<A::Item, Alloc>),
 }
 
-impl<A> Clone for TinyVec<A>
+impl<A, Alloc> Clone for TinyVec<A, Alloc>
 where
   A: Array + Clone,
   A::Item: Clone,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   fn clone(&self) -> Self {
@@ -130,7 +134,11 @@ where
   }
 }
 
-impl<A: Array> Default for TinyVec<A> {
+impl<A, Alloc> Default for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   #[inline]
   #[must_use]
   fn default() -> Self {
@@ -138,7 +146,11 @@ impl<A: Array> Default for TinyVec<A> {
   }
 }
 
-impl<A: Array> Deref for TinyVec<A> {
+impl<A, Alloc> Deref for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   type Target = [A::Item];
 
   impl_mirrored! {
@@ -149,7 +161,11 @@ impl<A: Array> Deref for TinyVec<A> {
   }
 }
 
-impl<A: Array> DerefMut for TinyVec<A> {
+impl<A, Alloc> DerefMut for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   impl_mirrored! {
     type Mirror = TinyVec;
     #[inline(always)]
@@ -158,7 +174,12 @@ impl<A: Array> DerefMut for TinyVec<A> {
   }
 }
 
-impl<A: Array, I: SliceIndex<[A::Item]>> Index<I> for TinyVec<A> {
+impl<A, I, Alloc> Index<I> for TinyVec<A, Alloc>
+where
+  A: Array,
+  I: SliceIndex<[A::Item]>,
+  Alloc: Allocator + Default,
+{
   type Output = <I as SliceIndex<[A::Item]>>::Output;
   #[inline(always)]
   #[must_use]
@@ -167,7 +188,12 @@ impl<A: Array, I: SliceIndex<[A::Item]>> Index<I> for TinyVec<A> {
   }
 }
 
-impl<A: Array, I: SliceIndex<[A::Item]>> IndexMut<I> for TinyVec<A> {
+impl<A, I, Alloc> IndexMut<I> for TinyVec<A, Alloc>
+where
+  A: Array,
+  I: SliceIndex<[A::Item]>,
+  Alloc: Allocator + Default,
+{
   #[inline(always)]
   #[must_use]
   fn index_mut(&mut self, index: I) -> &mut Self::Output {
@@ -177,7 +203,11 @@ impl<A: Array, I: SliceIndex<[A::Item]>> IndexMut<I> for TinyVec<A> {
 
 #[cfg(feature = "std")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "std")))]
-impl<A: Array<Item = u8>> std::io::Write for TinyVec<A> {
+impl<A, Alloc> std::io::Write for TinyVec<A, Alloc>
+where
+  A: Array<Item = u8>,
+  Alloc: Allocator + Default + Clone,
+{
   #[inline(always)]
   fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
     self.extend_from_slice(buf);
@@ -192,9 +222,11 @@ impl<A: Array<Item = u8>> std::io::Write for TinyVec<A> {
 
 #[cfg(feature = "serde")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "serde")))]
-impl<A: Array> Serialize for TinyVec<A>
+impl<A, Alloc> Serialize for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Serialize,
+  Alloc: Allocator + Default,
 {
   #[must_use]
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -211,9 +243,11 @@ where
 
 #[cfg(feature = "serde")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "serde")))]
-impl<'de, A: Array> Deserialize<'de> for TinyVec<A>
+impl<'de, A, Alloc> Deserialize<'de> for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Deserialize<'de>,
+  Alloc: Allocator + Default + Clone,
 {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
   where
@@ -223,9 +257,11 @@ where
   }
 }
 
+// Arbitrary can only be used with Global allocator,
+// until Arbitrary gets implemented for Vec<T, A>.
 #[cfg(feature = "arbitrary")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "arbitrary")))]
-impl<'a, A> arbitrary::Arbitrary<'a> for TinyVec<A>
+impl<'a, A> arbitrary::Arbitrary<'a> for TinyVec<A, Global>
 where
   A: Array,
   A::Item: arbitrary::Arbitrary<'a>,
@@ -238,7 +274,11 @@ where
   }
 }
 
-impl<A: Array> TinyVec<A> {
+impl<A, Alloc> TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   /// Returns whether elements are on heap
   #[inline(always)]
   #[must_use]
@@ -258,7 +298,7 @@ impl<A: Array> TinyVec<A> {
   /// Shrinks the capacity of the vector as much as possible.\
   /// It is inlined if length is less than `A::CAPACITY`.
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 2] => 1, 2, 3);
   /// assert!(tv.is_heap());
   /// let _ = tv.pop();
@@ -276,7 +316,7 @@ impl<A: Array> TinyVec<A> {
       return vec.shrink_to_fit();
     }
 
-    let moved_vec = core::mem::replace(vec, Vec::new());
+    let moved_vec = core::mem::replace(vec, Vec::new_in(Alloc::default()));
 
     let mut av = ArrayVec::default();
     let mut rest = av.fill(moved_vec);
@@ -286,7 +326,7 @@ impl<A: Array> TinyVec<A> {
 
   /// Moves the content of the TinyVec to the heap, if it's inline.
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// assert!(tv.is_inline());
   /// tv.move_to_the_heap();
@@ -311,7 +351,7 @@ impl<A: Array> TinyVec<A> {
   /// content is kept on the stack.
   ///
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// assert!(tv.is_inline());
   /// assert_eq!(Ok(()), tv.try_move_to_the_heap());
@@ -332,7 +372,7 @@ impl<A: Array> TinyVec<A> {
   /// If TinyVec is inline, moves the content of it to the heap.
   /// Also reserves additional space.
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// assert!(tv.is_inline());
   /// tv.move_to_the_heap_and_reserve(32);
@@ -357,7 +397,7 @@ impl<A: Array> TinyVec<A> {
   /// If the allocator reports a failure, then an error is returned.
   ///
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// assert!(tv.is_inline());
   /// assert_eq!(Ok(()), tv.try_move_to_the_heap_and_reserve(32));
@@ -381,7 +421,7 @@ impl<A: Array> TinyVec<A> {
   /// Reserves additional space.
   /// Moves to the heap if array can't hold `n` more items
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3, 4);
   /// assert!(tv.is_inline());
   /// tv.reserve(1);
@@ -411,7 +451,7 @@ impl<A: Array> TinyVec<A> {
   /// If the allocator reports a failure, then an error is returned.
   ///
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3, 4);
   /// assert!(tv.is_inline());
   /// assert_eq!(Ok(()), tv.try_reserve(1));
@@ -444,7 +484,7 @@ impl<A: Array> TinyVec<A> {
   /// Prefer `reserve` if future insertions are expected.
   /// ```
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3, 4);
   /// assert!(tv.is_inline());
   /// tv.reserve_exact(1);
@@ -480,7 +520,7 @@ impl<A: Array> TinyVec<A> {
   /// Prefer `reserve` if future insertions are expected.
   /// ```
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3, 4);
   /// assert!(tv.is_inline());
   /// assert_eq!(Ok(()), tv.try_reserve_exact(1));
@@ -508,7 +548,7 @@ impl<A: Array> TinyVec<A> {
   /// If the requested capacity is less than or equal to the array capacity you
   /// get an inline vec. If it's greater than you get a heap vec.
   /// ```
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let t = TinyVec::<[u8; 10]>::with_capacity(5);
   /// assert!(t.is_inline());
   /// assert!(t.capacity() >= 5);
@@ -523,12 +563,16 @@ impl<A: Array> TinyVec<A> {
     if cap <= A::CAPACITY {
       TinyVec::Inline(ArrayVec::default())
     } else {
-      TinyVec::Heap(Vec::with_capacity(cap))
+      TinyVec::Heap(Vec::with_capacity_in(cap, Alloc::default()))
     }
   }
 }
 
-impl<A: Array> TinyVec<A> {
+impl<A, Alloc> TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default + Clone,
+{
   /// Move all values from `other` into this vec.
   #[inline]
   pub fn append(&mut self, other: &mut Self) {
@@ -552,7 +596,7 @@ impl<A: Array> TinyVec<A> {
     ///
     /// ## Example
     /// ```rust
-    /// use tinyvec::*;
+    /// use tinyvec_alloc::*;
     /// let mut tv = tiny_vec!([&str; 4] => "foo", "bar", "quack", "zap");
     ///
     /// assert_eq!(tv.swap_remove(1), "bar");
@@ -582,7 +626,7 @@ impl<A: Array> TinyVec<A> {
     /// ## Example
     ///
     /// ```rust
-    /// use tinyvec::*;
+    /// use tinyvec_alloc::*;
     /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
     /// assert_eq!(tv.remove(1), 2);
     /// assert_eq!(tv.as_slice(), &[1, 3][..]);
@@ -633,7 +677,7 @@ impl<A: Array> TinyVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   ///
   /// let mut tv = tiny_vec!([i32; 10] => 1, 2, 3, 4);
   /// tv.retain(|&x| x % 2 == 0);
@@ -716,7 +760,7 @@ impl<A: Array> TinyVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// let tv2: TinyVec<[i32; 4]> = tv.drain(1..).collect();
   /// assert_eq!(tv.as_slice(), &[1][..]);
@@ -728,7 +772,7 @@ impl<A: Array> TinyVec<A> {
   #[inline]
   pub fn drain<R: RangeBounds<usize>>(
     &mut self, range: R,
-  ) -> TinyVecDrain<'_, A> {
+  ) -> TinyVecDrain<'_, A, Alloc> {
     match self {
       TinyVec::Inline(i) => TinyVecDrain::Inline(i.drain(range)),
       TinyVec::Heap(h) => TinyVecDrain::Heap(h.drain(range)),
@@ -737,7 +781,7 @@ impl<A: Array> TinyVec<A> {
 
   /// Clone each element of the slice into this vec.
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2);
   /// tv.extend_from_slice(&[3, 4]);
   /// assert_eq!(tv.as_slice(), [1, 2, 3, 4]);
@@ -778,7 +822,7 @@ impl<A: Array> TinyVec<A> {
   /// SemVer guarantee.
   #[inline(always)]
   #[doc(hidden)]
-  pub fn constructor_for_capacity(cap: usize) -> TinyVecConstructor<A> {
+  pub fn constructor_for_capacity(cap: usize) -> TinyVecConstructor<A, Alloc> {
     if cap <= A::CAPACITY {
       TinyVecConstructor::Inline(TinyVec::Inline)
     } else {
@@ -794,7 +838,7 @@ impl<A: Array> TinyVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 10] => 1, 2, 3);
   /// tv.insert(1, 4);
   /// assert_eq!(tv.as_slice(), &[1, 4, 2, 3]);
@@ -816,7 +860,7 @@ impl<A: Array> TinyVec<A> {
     };
 
     if let Some(x) = arr.try_insert(index, item) {
-      let mut v = Vec::with_capacity(arr.len() * 2);
+      let mut v = Vec::with_capacity_in(arr.len() * 2, Alloc::default());
       let mut it =
         arr.iter_mut().map(|r| core::mem::replace(r, Default::default()));
       v.extend(it.by_ref().take(index));
@@ -844,7 +888,7 @@ impl<A: Array> TinyVec<A> {
   /// ## Panics
   /// * If the length of the vec would overflow the capacity.
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 10] => 1, 2, 3);
   /// tv.push(4);
   /// assert_eq!(tv.as_slice(), &[1, 2, 3, 4]);
@@ -861,9 +905,13 @@ impl<A: Array> TinyVec<A> {
     // inlined together, and we take the extra cost of a function call only
     // in rare cases.
     #[cold]
-    fn drain_to_heap_and_push<A: Array>(
+    fn drain_to_heap_and_push<A: Array, Alloc: Allocator>(
       arr: &mut ArrayVec<A>, val: A::Item,
-    ) -> TinyVec<A> {
+    ) -> TinyVec<A, Alloc>
+    where
+      A: Array,
+      Alloc: Allocator + Default,
+    {
       /* Make the Vec twice the size to amortize the cost of draining */
       let mut v = arr.drain_to_vec_and_reserve(arr.len());
       v.push(val);
@@ -888,7 +936,7 @@ impl<A: Array> TinyVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   ///
   /// let mut tv = tiny_vec!([&str; 10] => "hello");
   /// tv.resize(3, "world");
@@ -914,7 +962,7 @@ impl<A: Array> TinyVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   ///
   /// let mut tv = tiny_vec!([i32; 3] => 1, 2, 3);
   /// tv.resize_with(5, Default::default);
@@ -952,7 +1000,7 @@ impl<A: Array> TinyVec<A> {
   /// ## Example
   ///
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// let tv2 = tv.split_off(1);
   /// assert_eq!(tv.as_slice(), &[1][..]);
@@ -980,7 +1028,7 @@ impl<A: Array> TinyVec<A> {
   ///
   /// ## Example
   /// ```rust
-  /// use tinyvec::*;
+  /// use tinyvec_alloc::*;
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// let tv2: TinyVec<[i32; 4]> = tv.splice(1.., 4..=6).collect();
   /// assert_eq!(tv.as_slice(), &[1, 4, 5, 6][..]);
@@ -992,10 +1040,11 @@ impl<A: Array> TinyVec<A> {
   #[inline]
   pub fn splice<R, I>(
     &mut self, range: R, replacement: I,
-  ) -> TinyVecSplice<'_, A, core::iter::Fuse<I::IntoIter>>
+  ) -> TinyVecSplice<'_, A, core::iter::Fuse<I::IntoIter>, Alloc>
   where
     R: RangeBounds<usize>,
     I: IntoIterator<Item = A::Item>,
+    Alloc: Allocator + Default,
   {
     use core::ops::Bound;
     let start = match range.start_bound() {
@@ -1045,18 +1094,22 @@ impl<A: Array> TinyVec<A> {
   }
 }
 
-/// Draining iterator for `TinyVecDrain`
+/// Draining iterator for [`TinyVec`]
 ///
-/// See [`TinyVecDrain::drain`](TinyVecDrain::<A>::drain)
+/// See [`TinyVec::drain`](TinyVec::drain)
 #[cfg_attr(docs_rs, doc(cfg(feature = "alloc")))]
-pub enum TinyVecDrain<'p, A: Array> {
+pub enum TinyVecDrain<'p, A: Array, Alloc: Allocator = Global> {
   #[allow(missing_docs)]
   Inline(ArrayVecDrain<'p, A::Item>),
   #[allow(missing_docs)]
-  Heap(vec::Drain<'p, A::Item>),
+  Heap(Drain<'p, A::Item, Alloc>),
 }
 
-impl<'p, A: Array> Iterator for TinyVecDrain<'p, A> {
+impl<'p, A, Alloc> Iterator for TinyVecDrain<'p, A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   type Item = A::Item;
 
   impl_mirrored! {
@@ -1083,7 +1136,11 @@ impl<'p, A: Array> Iterator for TinyVecDrain<'p, A> {
   }
 }
 
-impl<'p, A: Array> DoubleEndedIterator for TinyVecDrain<'p, A> {
+impl<'p, A, Alloc> DoubleEndedIterator for TinyVecDrain<'p, A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   impl_mirrored! {
     type Mirror = TinyVecDrain;
 
@@ -1098,17 +1155,23 @@ impl<'p, A: Array> DoubleEndedIterator for TinyVecDrain<'p, A> {
 /// Splicing iterator for `TinyVec`
 /// See [`TinyVec::splice`](TinyVec::<A>::splice)
 #[cfg_attr(docs_rs, doc(cfg(feature = "alloc")))]
-pub struct TinyVecSplice<'p, A: Array, I: Iterator<Item = A::Item>> {
-  parent: &'p mut TinyVec<A>,
+pub struct TinyVecSplice<'p, A, I, Alloc>
+where
+  A: Array,
+  I: Iterator<Item = A::Item>,
+  Alloc: Allocator + Default + Clone,
+{
+  parent: &'p mut TinyVec<A, Alloc>,
   removal_start: usize,
   removal_end: usize,
   replacement: I,
 }
 
-impl<'p, A, I> Iterator for TinyVecSplice<'p, A, I>
+impl<'p, A, I, Alloc> Iterator for TinyVecSplice<'p, A, I, Alloc>
 where
   A: Array,
   I: Iterator<Item = A::Item>,
+  Alloc: Allocator + Default + Clone,
 {
   type Item = A::Item;
 
@@ -1142,10 +1205,11 @@ where
   }
 }
 
-impl<'p, A, I> ExactSizeIterator for TinyVecSplice<'p, A, I>
+impl<'p, A, I, Alloc> ExactSizeIterator for TinyVecSplice<'p, A, I, Alloc>
 where
   A: Array,
   I: Iterator<Item = A::Item>,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   fn len(&self) -> usize {
@@ -1153,17 +1217,19 @@ where
   }
 }
 
-impl<'p, A, I> FusedIterator for TinyVecSplice<'p, A, I>
+impl<'p, A, I, Alloc> FusedIterator for TinyVecSplice<'p, A, I, Alloc>
 where
   A: Array,
   I: Iterator<Item = A::Item>,
+  Alloc: Allocator + Default + Clone,
 {
 }
 
-impl<'p, A, I> DoubleEndedIterator for TinyVecSplice<'p, A, I>
+impl<'p, A, I, Alloc> DoubleEndedIterator for TinyVecSplice<'p, A, I, Alloc>
 where
   A: Array,
   I: Iterator<Item = A::Item> + DoubleEndedIterator,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   fn next_back(&mut self) -> Option<A::Item> {
@@ -1189,8 +1255,11 @@ where
   }
 }
 
-impl<'p, A: Array, I: Iterator<Item = A::Item>> Drop
-  for TinyVecSplice<'p, A, I>
+impl<'p, A: Array, I, Alloc> Drop for TinyVecSplice<'p, A, I, Alloc>
+where
+  A: Array,
+  I: Iterator<Item = A::Item>,
+  Alloc: Allocator + Default + Clone,
 {
   fn drop(&mut self) {
     for _ in self.by_ref() {}
@@ -1205,7 +1274,11 @@ impl<'p, A: Array, I: Iterator<Item = A::Item>> Drop
   }
 }
 
-impl<A: Array> AsMut<[A::Item]> for TinyVec<A> {
+impl<A, Alloc> AsMut<[A::Item]> for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   #[inline(always)]
   #[must_use]
   fn as_mut(&mut self) -> &mut [A::Item] {
@@ -1213,7 +1286,11 @@ impl<A: Array> AsMut<[A::Item]> for TinyVec<A> {
   }
 }
 
-impl<A: Array> AsRef<[A::Item]> for TinyVec<A> {
+impl<A, Alloc> AsRef<[A::Item]> for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   #[inline(always)]
   #[must_use]
   fn as_ref(&self) -> &[A::Item] {
@@ -1221,7 +1298,11 @@ impl<A: Array> AsRef<[A::Item]> for TinyVec<A> {
   }
 }
 
-impl<A: Array> Borrow<[A::Item]> for TinyVec<A> {
+impl<A, Alloc> Borrow<[A::Item]> for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   #[inline(always)]
   #[must_use]
   fn borrow(&self) -> &[A::Item] {
@@ -1229,7 +1310,11 @@ impl<A: Array> Borrow<[A::Item]> for TinyVec<A> {
   }
 }
 
-impl<A: Array> BorrowMut<[A::Item]> for TinyVec<A> {
+impl<A, Alloc> BorrowMut<[A::Item]> for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   #[inline(always)]
   #[must_use]
   fn borrow_mut(&mut self) -> &mut [A::Item] {
@@ -1237,7 +1322,11 @@ impl<A: Array> BorrowMut<[A::Item]> for TinyVec<A> {
   }
 }
 
-impl<A: Array> Extend<A::Item> for TinyVec<A> {
+impl<A, Alloc> Extend<A::Item> for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   #[inline]
   fn extend<T: IntoIterator<Item = A::Item>>(&mut self, iter: T) {
     let iter = iter.into_iter();
@@ -1264,7 +1353,11 @@ impl<A: Array> Extend<A::Item> for TinyVec<A> {
   }
 }
 
-impl<A: Array> From<ArrayVec<A>> for TinyVec<A> {
+impl<A, Alloc> From<ArrayVec<A>> for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   #[inline(always)]
   #[must_use]
   fn from(arr: ArrayVec<A>) -> Self {
@@ -1272,16 +1365,21 @@ impl<A: Array> From<ArrayVec<A>> for TinyVec<A> {
   }
 }
 
-impl<A: Array> From<A> for TinyVec<A> {
+impl<A, Alloc> From<A> for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   fn from(array: A) -> Self {
     TinyVec::Inline(ArrayVec::from(array))
   }
 }
 
-impl<T, A> From<&'_ [T]> for TinyVec<A>
+impl<T, A, Alloc> From<&'_ [T]> for TinyVec<A, Alloc>
 where
   T: Clone + Default,
   A: Array<Item = T>,
+  Alloc: Allocator + Default,
 {
   #[inline]
   #[must_use]
@@ -1289,15 +1387,18 @@ where
     if let Ok(arr) = ArrayVec::try_from(slice) {
       TinyVec::Inline(arr)
     } else {
-      TinyVec::Heap(slice.into())
+      let mut vec = Vec::with_capacity_in(slice.len(), Alloc::default());
+      vec.extend_from_slice(slice);
+      TinyVec::Heap(vec)
     }
   }
 }
 
-impl<T, A> From<&'_ mut [T]> for TinyVec<A>
+impl<T, A, Alloc> From<&'_ mut [T]> for TinyVec<A, Alloc>
 where
   T: Clone + Default,
   A: Array<Item = T>,
+  Alloc: Allocator + Default,
 {
   #[inline]
   #[must_use]
@@ -1306,7 +1407,11 @@ where
   }
 }
 
-impl<A: Array> FromIterator<A::Item> for TinyVec<A> {
+impl<A, Alloc> FromIterator<A::Item> for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   #[inline]
   #[must_use]
   fn from_iter<T: IntoIterator<Item = A::Item>>(iter: T) -> Self {
@@ -1318,14 +1423,18 @@ impl<A: Array> FromIterator<A::Item> for TinyVec<A> {
 
 /// Iterator for consuming an `TinyVec` and returning owned elements.
 #[cfg_attr(docs_rs, doc(cfg(feature = "alloc")))]
-pub enum TinyVecIterator<A: Array> {
+pub enum TinyVecIterator<A: Array, Alloc: Allocator = Global> {
   #[allow(missing_docs)]
   Inline(ArrayVecIterator<A>),
   #[allow(missing_docs)]
-  Heap(alloc::vec::IntoIter<A::Item>),
+  Heap(IntoIter<A::Item, Alloc>),
 }
 
-impl<A: Array> TinyVecIterator<A> {
+impl<A, Alloc> TinyVecIterator<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   impl_mirrored! {
     type Mirror = TinyVecIterator;
     /// Returns the remaining items of this iterator as a slice.
@@ -1335,9 +1444,18 @@ impl<A: Array> TinyVecIterator<A> {
   }
 }
 
-impl<A: Array> FusedIterator for TinyVecIterator<A> {}
+impl<A, Alloc> FusedIterator for TinyVecIterator<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
+}
 
-impl<A: Array> Iterator for TinyVecIterator<A> {
+impl<A, Alloc> Iterator for TinyVecIterator<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   type Item = A::Item;
 
   impl_mirrored! {
@@ -1361,7 +1479,11 @@ impl<A: Array> Iterator for TinyVecIterator<A> {
   }
 }
 
-impl<A: Array> DoubleEndedIterator for TinyVecIterator<A> {
+impl<A, Alloc> DoubleEndedIterator for TinyVecIterator<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   impl_mirrored! {
     type Mirror = TinyVecIterator;
 
@@ -1373,7 +1495,11 @@ impl<A: Array> DoubleEndedIterator for TinyVecIterator<A> {
   }
 }
 
-impl<A: Array> ExactSizeIterator for TinyVecIterator<A> {
+impl<A, Alloc> ExactSizeIterator for TinyVecIterator<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   impl_mirrored! {
     type Mirror = TinyVecIterator;
     #[inline]
@@ -1381,9 +1507,11 @@ impl<A: Array> ExactSizeIterator for TinyVecIterator<A> {
   }
 }
 
-impl<A: Array> Debug for TinyVecIterator<A>
+impl<A, Alloc> Debug for TinyVecIterator<A, Alloc>
 where
+  A: Array,
   A::Item: Debug,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
@@ -1391,9 +1519,13 @@ where
   }
 }
 
-impl<A: Array> IntoIterator for TinyVec<A> {
+impl<A, Alloc> IntoIterator for TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   type Item = A::Item;
-  type IntoIter = TinyVecIterator<A>;
+  type IntoIter = TinyVecIterator<A, Alloc>;
   #[inline(always)]
   #[must_use]
   fn into_iter(self) -> Self::IntoIter {
@@ -1404,7 +1536,11 @@ impl<A: Array> IntoIterator for TinyVec<A> {
   }
 }
 
-impl<'a, A: Array> IntoIterator for &'a mut TinyVec<A> {
+impl<'a, A: Array, Alloc> IntoIterator for &'a mut TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   type Item = &'a mut A::Item;
   type IntoIter = core::slice::IterMut<'a, A::Item>;
   #[inline(always)]
@@ -1414,7 +1550,11 @@ impl<'a, A: Array> IntoIterator for &'a mut TinyVec<A> {
   }
 }
 
-impl<'a, A: Array> IntoIterator for &'a TinyVec<A> {
+impl<'a, A: Array, Alloc> IntoIterator for &'a TinyVec<A, Alloc>
+where
+  A: Array,
+  Alloc: Allocator + Default,
+{
   type Item = &'a A::Item;
   type IntoIter = core::slice::Iter<'a, A::Item>;
   #[inline(always)]
@@ -1424,9 +1564,11 @@ impl<'a, A: Array> IntoIterator for &'a TinyVec<A> {
   }
 }
 
-impl<A: Array> PartialEq for TinyVec<A>
+impl<A, Alloc> PartialEq for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: PartialEq,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   #[must_use]
@@ -1434,11 +1576,19 @@ where
     self.as_slice().eq(other.as_slice())
   }
 }
-impl<A: Array> Eq for TinyVec<A> where A::Item: Eq {}
-
-impl<A: Array> PartialOrd for TinyVec<A>
+impl<A, Alloc> Eq for TinyVec<A, Alloc>
 where
+  A: Array,
+  A::Item: Eq,
+  Alloc: Allocator + Default + Clone,
+{
+}
+
+impl<A, Alloc> PartialOrd for TinyVec<A, Alloc>
+where
+  A: Array,
   A::Item: PartialOrd,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   #[must_use]
@@ -1446,9 +1596,11 @@ where
     self.as_slice().partial_cmp(other.as_slice())
   }
 }
-impl<A: Array> Ord for TinyVec<A>
+impl<A, Alloc> Ord for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Ord,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   #[must_use]
@@ -1457,9 +1609,11 @@ where
   }
 }
 
-impl<A: Array> PartialEq<&A> for TinyVec<A>
+impl<A, Alloc> PartialEq<&A> for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: PartialEq,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   #[must_use]
@@ -1468,9 +1622,11 @@ where
   }
 }
 
-impl<A: Array> PartialEq<&[A::Item]> for TinyVec<A>
+impl<A, Alloc> PartialEq<&[A::Item]> for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: PartialEq,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   #[must_use]
@@ -1479,9 +1635,11 @@ where
   }
 }
 
-impl<A: Array> Hash for TinyVec<A>
+impl<A, Alloc> Hash for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Hash,
+  Alloc: Allocator + Default + Clone,
 {
   #[inline]
   fn hash<H: Hasher>(&self, state: &mut H) {
@@ -1493,9 +1651,11 @@ where
 // Formatting impls
 // // // // // // // //
 
-impl<A: Array> Binary for TinyVec<A>
+impl<A, Alloc> Binary for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Binary,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1516,9 +1676,11 @@ where
   }
 }
 
-impl<A: Array> Debug for TinyVec<A>
+impl<A, Alloc> Debug for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Debug,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1539,9 +1701,11 @@ where
   }
 }
 
-impl<A: Array> Display for TinyVec<A>
+impl<A, Alloc> Display for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Display,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1562,9 +1726,11 @@ where
   }
 }
 
-impl<A: Array> LowerExp for TinyVec<A>
+impl<A, Alloc> LowerExp for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: LowerExp,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1585,9 +1751,11 @@ where
   }
 }
 
-impl<A: Array> LowerHex for TinyVec<A>
+impl<A, Alloc> LowerHex for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: LowerHex,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1608,9 +1776,11 @@ where
   }
 }
 
-impl<A: Array> Octal for TinyVec<A>
+impl<A, Alloc> Octal for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Octal,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1631,9 +1801,11 @@ where
   }
 }
 
-impl<A: Array> Pointer for TinyVec<A>
+impl<A, Alloc> Pointer for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: Pointer,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1654,9 +1826,11 @@ where
   }
 }
 
-impl<A: Array> UpperExp for TinyVec<A>
+impl<A, Alloc> UpperExp for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: UpperExp,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1677,9 +1851,11 @@ where
   }
 }
 
-impl<A: Array> UpperHex for TinyVec<A>
+impl<A, Alloc> UpperHex for TinyVec<A, Alloc>
 where
+  A: Array,
   A::Item: UpperHex,
+  Alloc: Allocator + Default,
 {
   #[allow(clippy::missing_inline_in_public_items)]
   fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -1702,14 +1878,16 @@ where
 
 #[cfg(feature = "serde")]
 #[cfg_attr(docs_rs, doc(cfg(feature = "alloc")))]
-struct TinyVecVisitor<A: Array>(PhantomData<A>);
+struct TinyVecVisitor<A: Array, Alloc: Allocator>(PhantomData<(A, Alloc)>);
 
 #[cfg(feature = "serde")]
-impl<'de, A: Array> Visitor<'de> for TinyVecVisitor<A>
+impl<'de, A, Alloc> Visitor<'de> for TinyVecVisitor<A, Alloc>
 where
+  A: Array,
   A::Item: Deserialize<'de>,
+  Alloc: Allocator + Default + Clone,
 {
-  type Value = TinyVec<A>;
+  type Value = TinyVec<A, Alloc>;
 
   fn expecting(
     &self, formatter: &mut core::fmt::Formatter,
