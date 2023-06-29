@@ -1,6 +1,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use tinyvec::tiny_vec;
+use tinyvec_alloc::tiny_vec;
 
 fn bench_tinyvec_macro(c: &mut Criterion) {
   let mut g = c.benchmark_group("tinyvec_macro");

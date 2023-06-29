@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde_test::{assert_tokens, Token};
 use std::iter::FromIterator;
-use tinyvec::*;
+use tinyvec_alloc::*;
 
 #[test]
 fn test_a_vec() {

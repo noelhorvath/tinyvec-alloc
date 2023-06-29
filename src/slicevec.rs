@@ -140,7 +140,7 @@ impl<'s, T> SliceVec<'s, T> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [6, 7, 8];
   /// let mut sv = SliceVec::from(&mut arr);
   /// let drained_values: ArrayVec<[i32; 4]> = sv.drain(1..).collect();
@@ -230,7 +230,7 @@ impl<'s, T> SliceVec<'s, T> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [7, 7, 7, 7];
   /// let mut sv = SliceVec::from_slice_len(&mut arr, 0);
   /// let mut to_inf = sv.fill(0..);
@@ -271,7 +271,7 @@ impl<'s, T> SliceVec<'s, T> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [1, 2, 3, 0, 0];
   /// let mut sv = SliceVec::from_slice_len(&mut arr, 3);
   /// sv.insert(1, 4);
@@ -312,7 +312,7 @@ impl<'s, T> SliceVec<'s, T> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [1, 2];
   /// let mut sv = SliceVec::from(&mut arr);
   /// assert_eq!(sv.pop(), Some(2));
@@ -340,7 +340,7 @@ impl<'s, T> SliceVec<'s, T> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [0, 0];
   /// let mut sv = SliceVec::from_slice_len(&mut arr, 0);
   /// assert_eq!(&sv[..], []);
@@ -371,7 +371,7 @@ impl<'s, T> SliceVec<'s, T> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [1, 2, 3];
   /// let mut sv = SliceVec::from(&mut arr);
   /// assert_eq!(sv.remove(1), 2);
@@ -395,7 +395,7 @@ impl<'s, T> SliceVec<'s, T> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// // bigger
   /// let mut arr = ["hello", "", "", "", ""];
   /// let mut sv = SliceVec::from_slice_len(&mut arr, 1);
@@ -427,7 +427,7 @@ impl<'s, T> SliceVec<'s, T> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [1, 2, 3, 7, 7, 7, 7];
   /// let mut sv = SliceVec::from_slice_len(&mut arr, 3);
   /// sv.resize_with(5, Default::default);
@@ -468,7 +468,7 @@ impl<'s, T> SliceVec<'s, T> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   ///
   /// let mut arr = [1, 1, 2, 3, 3, 4];
   /// let mut sv = SliceVec::from(&mut arr);
@@ -548,7 +548,7 @@ impl<'s, T> SliceVec<'s, T> {
   /// ## Example
   ///
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [1, 2, 3];
   /// let mut sv = SliceVec::from(&mut arr);
   /// let sv2 = sv.split_off(1);
@@ -574,7 +574,7 @@ impl<'s, T> SliceVec<'s, T> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = ["foo", "bar", "quack", "zap"];
   /// let mut sv = SliceVec::from(&mut arr);
   ///
@@ -645,7 +645,7 @@ impl<'s, T> SliceVec<'s, T> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [0; 4];
   /// let mut sv = SliceVec::from_slice_len(&mut arr, 0);
   /// assert_eq!(sv.grab_spare_slice().len(), 4);
@@ -664,7 +664,7 @@ impl<'s, T> SliceVec<'s, T> {
   ///
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [0; 4];
   /// let mut sv = SliceVec::from_slice_len(&mut arr, 0);
   /// assert_eq!(sv.grab_spare_slice_mut().len(), 4);
@@ -682,7 +682,7 @@ impl<'s, T> From<&'s mut [T]> for SliceVec<'s, T> {
   /// Uses the full slice as the initial length.
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [0_i32; 2];
   /// let mut sv = SliceVec::from(&mut arr[..]);
   /// ```
@@ -699,7 +699,7 @@ where
   /// Calls `AsRef::as_mut` then uses the full slice as the initial length.
   /// ## Example
   /// ```rust
-  /// # use tinyvec::*;
+  /// # use tinyvec_alloc::*;
   /// let mut arr = [0, 0];
   /// let mut sv = SliceVec::from(&mut arr);
   /// ```

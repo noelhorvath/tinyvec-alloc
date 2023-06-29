@@ -5,7 +5,7 @@
 #[cfg(feature = "serde")]
 use serde_test::{assert_tokens, Token};
 use std::iter::FromIterator;
-use tinyvec::*;
+use tinyvec_alloc::*;
 
 #[test]
 fn TinyVec_swap_remove() {
@@ -257,7 +257,7 @@ fn TinyVec_from_slice_impl() {
 #[test]
 fn TinyVec_from_array() {
   let array = [9, 8, 7, 6, 5, 4, 3, 2, 1];
-  let tv = TinyVec::from(array);
+  let tv: TinyVec<[_; 9]> = TinyVec::from(array);
   assert_eq!(&array, &tv[..]);
 }
 

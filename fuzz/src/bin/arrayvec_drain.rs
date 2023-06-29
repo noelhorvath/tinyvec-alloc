@@ -2,7 +2,7 @@ use honggfuzz::fuzz;
 use rutenspitz::arbitrary_stateful_operations;
 use std::{convert::TryInto, fmt::Debug};
 
-use tinyvec::{ArrayVec, ArrayVecDrain};
+use tinyvec_alloc::{ArrayVec, ArrayVecDrain};
 use tinyvec_fuzz::ArbRange;
 
 const CAPACITY: usize = 28;
