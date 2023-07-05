@@ -1,3 +1,4 @@
+#![feature(allocator_api)]
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use tinyvec_alloc::tiny_vec;
