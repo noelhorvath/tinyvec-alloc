@@ -1,3 +1,4 @@
+#![feature(allocator_api)]
 #![cfg(feature = "alloc")]
 #![allow(bad_style)]
 #![allow(clippy::redundant_clone)]
@@ -257,7 +258,7 @@ fn TinyVec_from_slice_impl() {
 #[test]
 fn TinyVec_from_array() {
   let array = [9, 8, 7, 6, 5, 4, 3, 2, 1];
-  let tv: TinyVec<[_; 9]> = TinyVec::from(array);
+  let tv = TinyVec::<[_; 9]>::from(array);
   assert_eq!(&array, &tv[..]);
 }
 
