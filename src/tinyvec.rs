@@ -79,7 +79,6 @@ macro_rules! tiny_vec {
           let boxed: $crate::alloc::boxed::Box<[_], _> =
             $crate::alloc::boxed::Box::new_in([$($elem),*], <$alloc_type>::default());
           f($crate::alloc::vec::Vec::from(boxed))
-          //f([$($elem),*].to_vec_in(<$alloc_type as core::default::Default>::default()))
         }
       }
     }
