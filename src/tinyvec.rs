@@ -1,7 +1,6 @@
 #![cfg(feature = "alloc")]
 
 use super::*;
-
 use alloc::{
   alloc::{Allocator, Global},
   vec::{Drain, IntoIter, Vec},
@@ -19,28 +18,53 @@ use serde::de::{Deserialize, Deserializer, SeqAccess, Visitor};
 #[cfg(feature = "serde")]
 use serde::ser::{Serialize, SerializeSeq, Serializer};
 
-/// Helper to make a `TinyVec`.
+/// Helper to make a `TinyVec` with a custom allocator.
 ///
 /// You specify the backing array type, and optionally give all the elements you
 /// want to initially place into the array.
 ///
+/// # Examples
+///
+/// Using the [default][`Global`] allocator:
 /// ```rust
+/// #![feature(allocator_api)]
 /// use tinyvec_alloc::*;
 ///
 /// // The backing array type can be specified in the macro call
 /// let empty_tv = tiny_vec!([u8; 16]);
 /// let some_ints = tiny_vec!([i32; 4] => 1, 2, 3);
 /// let many_ints = tiny_vec!([i32; 4] => 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+/// let from_array = tiny_vec![0_u8; 4];
 ///
 /// // Or left to inference
 /// let empty_tv: TinyVec<[u8; 16]> = tiny_vec!();
 /// let some_ints: TinyVec<[i32; 4]> = tiny_vec!(1, 2, 3);
 /// let many_ints: TinyVec<[i32; 4]> = tiny_vec!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+/// let from_array: TinyVec<[i32; 4]> = tiny_vec![0; 4];
+/// ```
+///
+/// Using a custom allocator:
+/// ```rust
+/// #![feature(allocator_api)]
+/// # use tinyvec_alloc::alloc::alloc::Global as CustomAllocator;
+/// use tinyvec_alloc::*;
+///
+/// // The backing array type can be specified in the macro call
+/// let empty_tv = tiny_vec!(in CustomAllocator; [u8; 16]);
+/// let some_ints = tiny_vec!(in CustomAllocator; [i32; 4] => 1, 2, 3);
+/// let many_ints = tiny_vec!(in CustomAllocator; [i32; 4] => 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+/// let from_array = tiny_vec![in CustomAllocator; 0; 4];
+///
+/// // Or left to inference
+/// let empty_tv: TinyVec<[u8; 16]> = tiny_vec!(in CustomAllocator);
+/// let some_ints: TinyVec<[i32; 4], _> = tiny_vec!(in CustomAllocator; 1, 2, 3);
+/// let many_ints: TinyVec<[i32; 4], _> = tiny_vec!(in CustomAllocator; 1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
+/// let from_array: TinyVec<[i32; 4], _> = tiny_vec![in CustomAllocator; 0; 4];
 /// ```
 #[macro_export]
 #[cfg_attr(docs_rs, doc(cfg(feature = "alloc")))]
 macro_rules! tiny_vec {
-  ($array_type:ty => $($elem:expr),* $(,)?) => {
+  (in $alloc_type:ty; $array_type:ty => $($elem:expr),* $(,)?) => {
     {
       // https://github.com/rust-lang/lang-team/issues/28
       const INVOKED_ELEM_COUNT: usize = 0 $( + { let _ = stringify!($elem); 1 })*;
@@ -51,19 +75,38 @@ macro_rules! tiny_vec {
           f($crate::array_vec!($array_type => $($elem),*))
         }
         $crate::TinyVecConstructor::Heap(f) => {
-          f($crate::alloc::vec!($($elem),*))
+          // TODO: Replace with vec! once it has support for custom allocator
+          let boxed: $crate::alloc::boxed::Box<[_], _> =
+            $crate::alloc::boxed::Box::new_in([$($elem),*], <$alloc_type>::default());
+          f($crate::alloc::vec::Vec::from(boxed))
+          //f([$($elem),*].to_vec_in(<$alloc_type as core::default::Default>::default()))
         }
       }
     }
   };
+  ($array_type:ty => $($elem:expr),* $(,)?) => {
+    $crate::tiny_vec!(in $crate::alloc::alloc::Global; $array_type => $($elem),*)
+  };
+  (in $alloc_type:ty; $array_type:ty) => {
+    $crate::TinyVec::<$array_type, $alloc_type>::default()
+  };
   ($array_type:ty) => {
-    $crate::TinyVec::<$array_type>::default()
+    $crate::tiny_vec!(in $crate::alloc::alloc::Global; $array_type)
+  };
+  (in $alloc_type:ty; $($elem:expr),*) => {
+    $crate::tiny_vec!(in $alloc_type; _ => $($elem),*)
   };
   ($($elem:expr),*) => {
-    $crate::tiny_vec!(_ => $($elem),*)
+    $crate::tiny_vec!(in $crate::alloc::alloc::Global; _ => $($elem),*)
+  };
+  (in $alloc_type:ty; $elem:expr; $n:expr) => {
+    $crate::TinyVec::<[_; $n], $alloc_type>::from([$elem; $n])
   };
   ($elem:expr; $n:expr) => {
-    $crate::TinyVec::from([$elem; $n])
+    $crate::tiny_vec!(in $crate::alloc::alloc::Global; $elem; $n)
+  };
+  (in $alloc_type:ty) => {
+    $crate::tiny_vec!(in $alloc_type; _)
   };
   () => {
     $crate::tiny_vec!(_)
@@ -93,7 +136,9 @@ pub enum TinyVecConstructor<A: Array, Alloc: Allocator = Global> {
 /// There is also a macro
 ///
 /// ```rust
-/// # use tinyvec_alloc::*;
+/// #![feature(allocator_api)]
+/// use tinyvec_alloc::*;
+///
 /// let empty_tv = tiny_vec!([u8; 16]);
 /// let some_ints = tiny_vec!([i32; 4] => 1, 2, 3);
 /// ```
@@ -298,7 +343,9 @@ where
   /// Shrinks the capacity of the vector as much as possible.\
   /// It is inlined if length is less than `A::CAPACITY`.
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 2] => 1, 2, 3);
   /// assert!(tv.is_heap());
   /// let _ = tv.pop();
@@ -326,7 +373,9 @@ where
 
   /// Moves the content of the TinyVec to the heap, if it's inline.
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// assert!(tv.is_inline());
   /// tv.move_to_the_heap();
@@ -351,7 +400,9 @@ where
   /// content is kept on the stack.
   ///
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// assert!(tv.is_inline());
   /// assert_eq!(Ok(()), tv.try_move_to_the_heap());
@@ -372,7 +423,9 @@ where
   /// If TinyVec is inline, moves the content of it to the heap.
   /// Also reserves additional space.
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// assert!(tv.is_inline());
   /// tv.move_to_the_heap_and_reserve(32);
@@ -397,7 +450,9 @@ where
   /// If the allocator reports a failure, then an error is returned.
   ///
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// assert!(tv.is_inline());
   /// assert_eq!(Ok(()), tv.try_move_to_the_heap_and_reserve(32));
@@ -421,7 +476,9 @@ where
   /// Reserves additional space.
   /// Moves to the heap if array can't hold `n` more items
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3, 4);
   /// assert!(tv.is_inline());
   /// tv.reserve(1);
@@ -451,7 +508,9 @@ where
   /// If the allocator reports a failure, then an error is returned.
   ///
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3, 4);
   /// assert!(tv.is_inline());
   /// assert_eq!(Ok(()), tv.try_reserve(1));
@@ -482,9 +541,10 @@ where
   /// Note that the allocator may give the collection more space than it requests.
   /// Therefore, capacity can not be relied upon to be precisely minimal.
   /// Prefer `reserve` if future insertions are expected.
-  /// ```
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3, 4);
   /// assert!(tv.is_inline());
   /// tv.reserve_exact(1);
@@ -520,7 +580,9 @@ where
   /// Prefer `reserve` if future insertions are expected.
   /// ```
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3, 4);
   /// assert!(tv.is_inline());
   /// assert_eq!(Ok(()), tv.try_reserve_exact(1));
@@ -596,7 +658,9 @@ where
     ///
     /// ## Example
     /// ```rust
+    /// #![feature(allocator_api)]
     /// use tinyvec_alloc::*;
+    ///
     /// let mut tv = tiny_vec!([&str; 4] => "foo", "bar", "quack", "zap");
     ///
     /// assert_eq!(tv.swap_remove(1), "bar");
@@ -626,7 +690,9 @@ where
     /// ## Example
     ///
     /// ```rust
+    /// #![feature(allocator_api)]
     /// use tinyvec_alloc::*;
+    ///
     /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
     /// assert_eq!(tv.remove(1), 2);
     /// assert_eq!(tv.as_slice(), &[1, 3][..]);
@@ -677,6 +743,7 @@ where
   /// ## Example
   ///
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
   ///
   /// let mut tv = tiny_vec!([i32; 10] => 1, 2, 3, 4);
@@ -760,7 +827,9 @@ where
   ///
   /// ## Example
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// let tv2: TinyVec<[i32; 4]> = tv.drain(1..).collect();
   /// assert_eq!(tv.as_slice(), &[1][..]);
@@ -781,7 +850,9 @@ where
 
   /// Clone each element of the slice into this vec.
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2);
   /// tv.extend_from_slice(&[3, 4]);
   /// assert_eq!(tv.as_slice(), [1, 2, 3, 4]);
@@ -838,7 +909,9 @@ where
   ///
   /// ## Example
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 10] => 1, 2, 3);
   /// tv.insert(1, 4);
   /// assert_eq!(tv.as_slice(), &[1, 4, 2, 3]);
@@ -888,7 +961,9 @@ where
   /// ## Panics
   /// * If the length of the vec would overflow the capacity.
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 10] => 1, 2, 3);
   /// tv.push(4);
   /// assert_eq!(tv.as_slice(), &[1, 2, 3, 4]);
@@ -936,6 +1011,7 @@ where
   /// ## Example
   ///
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
   ///
   /// let mut tv = tiny_vec!([&str; 10] => "hello");
@@ -962,6 +1038,7 @@ where
   /// ## Example
   ///
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
   ///
   /// let mut tv = tiny_vec!([i32; 3] => 1, 2, 3);
@@ -1000,7 +1077,9 @@ where
   /// ## Example
   ///
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// let tv2 = tv.split_off(1);
   /// assert_eq!(tv.as_slice(), &[1][..]);
@@ -1028,7 +1107,9 @@ where
   ///
   /// ## Example
   /// ```rust
+  /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
+  ///
   /// let mut tv = tiny_vec!([i32; 4] => 1, 2, 3);
   /// let tv2: TinyVec<[i32; 4]> = tv.splice(1.., 4..=6).collect();
   /// assert_eq!(tv.as_slice(), &[1, 4, 5, 6][..]);
@@ -1370,6 +1451,8 @@ where
   A: Array,
   Alloc: Allocator + Default,
 {
+  #[inline(always)]
+  #[must_use]
   fn from(array: A) -> Self {
     TinyVec::Inline(ArrayVec::from(array))
   }
