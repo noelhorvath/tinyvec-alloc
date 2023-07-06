@@ -540,6 +540,7 @@ where
   /// Note that the allocator may give the collection more space than it requests.
   /// Therefore, capacity can not be relied upon to be precisely minimal.
   /// Prefer `reserve` if future insertions are expected.
+  /// ```
   /// ```rust
   /// #![feature(allocator_api)]
   /// use tinyvec_alloc::*;
