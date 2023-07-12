@@ -240,19 +240,19 @@ fn TinyVec_resize() {
 fn TinyVec_from_slice_impl() {
   let bigger_slice: [u8; 11] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   let tinyvec: TinyVec<[u8; 10]> = TinyVec::Heap((&bigger_slice[..]).into());
-  assert_eq!(TinyVec::from(&bigger_slice[..]), tinyvec);
+  assert_eq!(TinyVec::<_>::from(&bigger_slice[..]), tinyvec);
 
   let smaller_slice: [u8; 5] = [0, 1, 2, 3, 4];
   let tinyvec: TinyVec<[u8; 10]> = TinyVec::Inline(ArrayVec::from_array_len(
     [0, 1, 2, 3, 4, 0, 0, 0, 0, 0],
     5,
   ));
-  assert_eq!(TinyVec::from(&smaller_slice[..]), tinyvec);
+  assert_eq!(TinyVec::<_>::from(&smaller_slice[..]), tinyvec);
 
   let same_size: [u8; 4] = [0, 1, 2, 3];
   let tinyvec: TinyVec<[u8; 4]> =
     TinyVec::Inline(ArrayVec::from_array_len(same_size, 4));
-  assert_eq!(TinyVec::from(&same_size[..]), tinyvec);
+  assert_eq!(TinyVec::<_>::from(&same_size[..]), tinyvec);
 }
 
 #[test]

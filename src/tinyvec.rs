@@ -272,7 +272,6 @@ where
   A::Item: Serialize,
   Alloc: Allocator + Default,
 {
-  #[must_use]
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
   where
     S: Serializer,
@@ -332,6 +331,7 @@ where
       TinyVec::Inline(_) => false,
     }
   }
+
   /// Returns whether elements are on stack
   #[inline(always)]
   #[must_use]
@@ -441,6 +441,60 @@ where
     *self = TinyVec::Heap(v);
   }
 
+  #[must_use]
+  /// Reallocates the tinyvec with a new allocator if it is on the heap.
+  ///
+  /// This method consumes `self`.
+  ///
+  /// Reallocating a heap tinyvec with a new allocator:
+  /// ```rust
+  /// #![feature(allocator_api)]
+  /// # use tinyvec_alloc::alloc::alloc::Global;
+  /// # use tinyvec_alloc::alloc::alloc::Global as CustomAllocator;
+  /// use tinyvec_alloc::*;
+  ///
+  /// let mut tv = tiny_vec!([u16; 4] => 1, 2, 3, 4, 5);
+  /// assert!(tv.is_heap());
+  /// // `realloc` will allocate if the tinyvec is on the heap.
+  /// let reallocated_tv = tv.clone().realloc::<CustomAllocator>();
+  /// assert!(reallocated_tv.is_heap());
+  /// assert_eq!(tv, reallocated_tv);
+  /// ```
+  ///
+  /// Trying to reallocate an inline tinyvec with a new allocator:
+  /// ```rust
+  /// #![feature(allocator_api)]
+  /// # use tinyvec_alloc::alloc::alloc::Global;
+  /// # use tinyvec_alloc::alloc::alloc::Global as CustomAllocator;
+  /// use tinyvec_alloc::*;
+  ///
+  /// let mut tv = tiny_vec![0x61_u16; 32];
+  /// assert!(tv.is_inline());
+  /// // `realloc` will not allocate if the tinyvec is inline.
+  /// let reallocated_tv = tv.clone().realloc::<CustomAllocator>();
+  /// assert!(reallocated_tv.is_inline());
+  /// assert_eq!(tv, reallocated_tv);
+  /// ```
+  pub fn realloc<NewAlloc>(self) -> TinyVec<A, NewAlloc>
+  where
+    NewAlloc: Allocator + Default + Clone,
+  {
+    let vec = match self {
+      Self::Heap(vec) if vec.len() == 0 => {
+        return TinyVec::<A, NewAlloc>::new()
+      }
+      Self::Heap(vec) => vec,
+      Self::Inline(arr) => return TinyVec::<A, NewAlloc>::Inline(arr),
+    };
+
+    let mut new_vec = Vec::<A::Item, NewAlloc>::with_capacity_in(
+      vec.capacity(),
+      NewAlloc::default(),
+    );
+    new_vec.extend(vec.into_iter());
+    TinyVec::<A, NewAlloc>::Heap(new_vec)
+  }
+
   /// If TinyVec is inline, try to move the content of it to the heap.
   /// Also reserves additional space.
   ///
@@ -469,7 +523,7 @@ where
 
     let v = arr.try_drain_to_vec_and_reserve(n)?;
     *self = TinyVec::Heap(v);
-    return Ok(());
+    Ok(())
   }
 
   /// Reserves additional space.
@@ -496,7 +550,6 @@ where
     }
 
     /* In this place array has enough place, so no work is needed more */
-    return;
   }
 
   /// Tries to reserve additional space.
@@ -529,7 +582,7 @@ where
     }
 
     /* In this place array has enough place, so no work is needed more */
-    return Ok(());
+    Ok(())
   }
 
   /// Reserves additional space.
@@ -563,7 +616,6 @@ where
     }
 
     /* In this place array has enough place, so no work is needed more */
-    return;
   }
 
   /// Tries to reserve additional space.
@@ -602,7 +654,7 @@ where
     }
 
     /* In this place array has enough place, so no work is needed more */
-    return Ok(());
+    Ok(())
   }
 
   /// Makes a new TinyVec with _at least_ the given capacity.
@@ -751,7 +803,7 @@ where
   /// assert_eq!(tv.as_slice(), &[2, 4][..]);
   /// ```
   #[inline]
-  pub fn retain<F: FnMut(&A::Item) -> bool>(self: &mut Self, acceptable: F) {
+  pub fn retain<F: FnMut(&A::Item) -> bool>(&mut self, acceptable: F) {
     match self {
       TinyVec::Inline(i) => i.retain(acceptable),
       TinyVec::Heap(h) => h.retain(acceptable),
@@ -761,14 +813,14 @@ where
   /// Helper for getting the mut slice.
   #[inline(always)]
   #[must_use]
-  pub fn as_mut_slice(self: &mut Self) -> &mut [A::Item] {
+  pub fn as_mut_slice(&mut self) -> &mut [A::Item] {
     self.deref_mut()
   }
 
   /// Helper for getting the shared slice.
   #[inline(always)]
   #[must_use]
-  pub fn as_slice(self: &Self) -> &[A::Item] {
+  pub fn as_slice(&self) -> &[A::Item] {
     self.deref()
   }
 
@@ -934,8 +986,7 @@ where
 
     if let Some(x) = arr.try_insert(index, item) {
       let mut v = Vec::with_capacity_in(arr.len() * 2, Alloc::default());
-      let mut it =
-        arr.iter_mut().map(|r| core::mem::replace(r, Default::default()));
+      let mut it = arr.iter_mut().map(core::mem::take);
       v.extend(it.by_ref().take(index));
       v.push(x);
       v.extend(it);
@@ -1375,7 +1426,7 @@ where
   #[inline(always)]
   #[must_use]
   fn as_ref(&self) -> &[A::Item] {
-    &*self
+    self
   }
 }
 
@@ -1387,7 +1438,7 @@ where
   #[inline(always)]
   #[must_use]
   fn borrow(&self) -> &[A::Item] {
-    &*self
+    self
   }
 }
 
@@ -1647,18 +1698,34 @@ where
   }
 }
 
-impl<A, Alloc> PartialEq for TinyVec<A, Alloc>
+impl<A, LAlloc, RAlloc> PartialEq<TinyVec<A, RAlloc>> for TinyVec<A, LAlloc>
 where
   A: Array,
   A::Item: PartialEq,
-  Alloc: Allocator + Default + Clone,
+  LAlloc: Allocator + Default + Clone,
+  RAlloc: Allocator + Default + Clone,
 {
   #[inline]
   #[must_use]
-  fn eq(&self, other: &Self) -> bool {
+  fn eq(&self, other: &TinyVec<A, RAlloc>) -> bool {
     self.as_slice().eq(other.as_slice())
   }
 }
+
+impl<A, LAlloc, RAlloc> PartialEq<&TinyVec<A, RAlloc>> for TinyVec<A, LAlloc>
+where
+  A: Array,
+  A::Item: PartialEq,
+  LAlloc: Allocator + Default + Clone,
+  RAlloc: Allocator + Default + Clone,
+{
+  #[inline]
+  #[must_use]
+  fn eq(&self, other: &&TinyVec<A, RAlloc>) -> bool {
+    self.as_slice().eq(other.as_slice())
+  }
+}
+
 impl<A, Alloc> Eq for TinyVec<A, Alloc>
 where
   A: Array,
@@ -1667,18 +1734,38 @@ where
 {
 }
 
-impl<A, Alloc> PartialOrd for TinyVec<A, Alloc>
+impl<A, LAlloc, RAlloc> PartialOrd<TinyVec<A, RAlloc>> for TinyVec<A, LAlloc>
 where
   A: Array,
   A::Item: PartialOrd,
-  Alloc: Allocator + Default + Clone,
+  LAlloc: Allocator + Default + Clone,
+  RAlloc: Allocator + Default + Clone,
 {
   #[inline]
   #[must_use]
-  fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+  fn partial_cmp(
+    &self, other: &TinyVec<A, RAlloc>,
+  ) -> Option<core::cmp::Ordering> {
     self.as_slice().partial_cmp(other.as_slice())
   }
 }
+
+impl<A, LAlloc, RAlloc> PartialOrd<&TinyVec<A, RAlloc>> for TinyVec<A, LAlloc>
+where
+  A: Array,
+  A::Item: PartialOrd,
+  LAlloc: Allocator + Default + Clone,
+  RAlloc: Allocator + Default + Clone,
+{
+  #[inline]
+  #[must_use]
+  fn partial_cmp(
+    &self, other: &&TinyVec<A, RAlloc>,
+  ) -> Option<core::cmp::Ordering> {
+    self.as_slice().partial_cmp(other.as_slice())
+  }
+}
+
 impl<A, Alloc> Ord for TinyVec<A, Alloc>
 where
   A: Array,
@@ -1753,7 +1840,7 @@ where
       Binary::fmt(elem, f)?;
     }
     if f.alternate() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
@@ -1778,7 +1865,7 @@ where
       Debug::fmt(elem, f)?;
     }
     if f.alternate() && !self.is_empty() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
@@ -1803,7 +1890,7 @@ where
       Display::fmt(elem, f)?;
     }
     if f.alternate() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
@@ -1828,7 +1915,7 @@ where
       LowerExp::fmt(elem, f)?;
     }
     if f.alternate() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
@@ -1853,7 +1940,7 @@ where
       LowerHex::fmt(elem, f)?;
     }
     if f.alternate() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
@@ -1878,7 +1965,7 @@ where
       Octal::fmt(elem, f)?;
     }
     if f.alternate() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
@@ -1903,7 +1990,7 @@ where
       Pointer::fmt(elem, f)?;
     }
     if f.alternate() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
@@ -1928,7 +2015,7 @@ where
       UpperExp::fmt(elem, f)?;
     }
     if f.alternate() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
@@ -1953,7 +2040,7 @@ where
       UpperHex::fmt(elem, f)?;
     }
     if f.alternate() {
-      write!(f, ",\n")?;
+      writeln!(f, ",")?;
     }
     write!(f, "]")
   }
